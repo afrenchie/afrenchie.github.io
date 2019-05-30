@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<!--
+Example :
+https://www.pegaxchange.com/2018/03/23/websocket-client/
+-->
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+
+table {
+  border: 2px solid black;
+}
+
+input {
+  width: 300px;
+}
+
+select {
+  width: 300px;
+}
+
+textarea {
+  width: 513px;
+  border: 2px solid black;
+}
+
+#btnConnect {
+  width: 100px;
+}
+
+#btnDisconnect {
+  width: 100px;
+}
+
+#btnSend {
+  width: 100px;
+}
+
+</style>
+<script>
+var webSocket = null;
+var ws_protocol = null;
+var ws_hostname = null;
+var ws_port = null;
+
+var cmd_kill = 255;         // 0b11111111 255 0xff
+var cmd_close = 240;        // 0b11110000 240 0xf0
+var cmd_manual = 224;       // 0b11100000 224 0xe0
+var cmd_remote = 192;       // 0b11000000 192 0xc0
+var cmd_stop = 0;           // 0b00000000 0   0x0
+var cmd_avancer = 3;        // 0b00000011 3   0x3
+var cmd_reculer = 12;       // 0b00001100 12  0xc
+var cmd_gauche_avancer = 1; // 0b00000001 1   0x1
+var cmd_gauche_reculer = 4; // 0b00000100 4   0x4
+var cmd_droit_avancer = 2;  // 0b00000010 2   0x2
+var cmd_droit_reculer = 8;  // 0b00001000 8   0x8
+var cmd_pivot_gauche = 9;   // 0b00001001 9   0x9
+var cmd_pivot_droit = 6;    // 0b00000110 6   0x6
+var cmd_neutre = 16;        // 0b00010000 16  0x10
+
+var thread_interval_id;
+var longInt8View = new Uint8Array(new ArrayBuffer(1));
+
+/**
+ * Event handler for clicking on button "Connect"
+ */
+function onConnectClick() {
+    var ws_protocol = document.getElementById("protocol").value;
+    var ws_hostname = document.getElementById("hostname").value;
+    var ws_port     = document.getElementById("port").value;
+    openWSConnection(ws_protocol, ws_hostname, ws_port);
+}
+/**
+ * Event handler for clicking on button "Disconnect"
+ */
+function onDisconnectClick() {
+    var longInt8View = new Uint8Array(new ArrayBuffer(1));
+    longInt8View[0] = 240;
+    webSocket.send(longInt8View);
+    webSocket.close();
+    document.getElementById("message_btn").disabled   = true;
+    document.getElementById("command_btn").disabled   = true;
+    document.getElementById("btnConnect").disabled    = false;
+    document.getElementById("btnDisconnect").disabled = true;
+}
+/**
+ * Open a new WebSocket connection using the given parameters
+ */
+function openWSConnection(protocol, hostname, port) {
+    var webSocketURL = null;
+    webSocketURL = protocol + "://" + hostname + ":" + port;
+    console.log("openWSConnection::Connecting to: " + webSocketURL);
+    try {
+        webSocket = new WebSocket(webSocketURL);
+        webSocket.onopen = function(openEvent) {
+            console.log("WebSocket OPEN: " + JSON.stringify(openEvent, null, 4));
+            document.getElementById("message_btn").disabled   = false;
+            document.getElementById("command_btn").disabled   = false;
+            document.getElementById("btnConnect").disabled    = true;
+            document.getElementById("btnDisconnect").disabled = false;
+            document.getElementById("btnRUN").disabled        = false;
+        };
+        webSocket.onclose = function (closeEvent) {
+            console.log("WebSocket CLOSE: " + JSON.stringify(closeEvent, null, 4));
+            document.getElementById("message_btn").disabled   = true;
+            document.getElementById("command_btn").disabled   = true;
+            document.getElementById("btnConnect").disabled    = false;
+            document.getElementById("btnDisconnect").disabled = true;
+            document.getElementById("btnRUN").disabled        = true;
+        };
+        webSocket.onerror = function (errorEvent) {
+            console.log("WebSocket ERROR: " + JSON.stringify(errorEvent, null, 4));
+        };
+        webSocket.onmessage = function (messageEvent) {
+            var wsMsg = messageEvent.data;
+            console.log("WebSocket MESSAGE: " + wsMsg);
+            if (wsMsg.indexOf("error") > 0) {
+                document.getElementById("incomingMsgOutput").value += "error: " + wsMsg.error + "\r\n";
+            } else {
+                document.getElementById("incomingMsgOutput").value += "message: " + wsMsg + "\r\n";
+            }
+        };
+    } catch (exception) {
+        console.error(exception);
+    }
+}
+
+function isWebsocketReady(){
+  if (webSocket.readyState != WebSocket.OPEN) {
+      console.error("webSocket is not open: " + webSocket.readyState);
+      return false;
+  }
+  else {
+    return true;
+  }
+}
+/**
+ * Send a message to the WebSocket server
+ */
+function onMessageSendClick() {
+    if (! isWebsocketReady()) {
+        return;
+    }
+    webSocket.send(document.getElementById("message_input").value);
+}
+
+function onCommandSendClick() {
+  if (! isWebsocketReady()) {
+      return;
+  }
+    longInt8View[0] = document.getElementById("command_input").value;
+    webSocket.send(longInt8View);
+}
+
+function sendCommand(){
+    if (! isWebsocketReady()) {
+      stopCommandSending();
+      return;
+    }
+    longInt8View[0] = document.getElementById("commande_code").value;
+    webSocket.send(longInt8View);
+}
+
+function onRUNClick() {
+    document.getElementById("btnRUN").disabled   = true;
+    document.getElementById("btnSTOP").disabled   = false;
+    document.getElementById("commande_code").value = cmd_neutre;
+    thread_interval_id = window.setInterval(sendCommand, 500);
+}
+
+function stopCommandSending(){
+    document.getElementById("btnSTOP").disabled   = true;
+    document.getElementById("btnRUN").disabled   = false;
+    clearInterval(thread_interval_id);
+}
+
+function onSTOPClick() {
+    stopCommandSending();
+}
+
+function setNeutre() {
+    document.getElementById("commande_code").value = cmd_neutre;
+}
+
+function setAvancer() {
+    document.getElementById("commande_code").value = cmd_avancer;
+}
+
+function setReculer() {
+    document.getElementById("commande_code").value = cmd_reculer;
+}
+
+function setStopper() {
+    document.getElementById("commande_code").value = cmd_stop;
+}
+
+function setDroitA() {
+    document.getElementById("commande_code").value = cmd_droit_avancer;
+}
+
+function setDroitR() {
+    document.getElementById("commande_code").value = cmd_droit_reculer;
+}
+
+function setGaucheA() {
+    document.getElementById("commande_code").value = cmd_gauche_avancer;
+}
+
+function setGaucheR() {
+    document.getElementById("commande_code").value = cmd_gauche_reculer;
+}
+
+function setPDroit() {
+    document.getElementById("commande_code").value = cmd_pivot_droit;
+}
+
+function setPGauche() {
+    document.getElementById("commande_code").value = cmd_pivot_gauche;
+}
+
+</script>
+</head>
+<body>
+
+
+  <h1>WebSocket Client</h1>
+  <!-- Paramètres de connexion websocket-->
+  <table>
+      <tr>
+          <td width="200px">WS Protocol</td>
+          <td>
+              <select id="protocol">
+                  <option value="ws" selected="selected">ws</option>
+                  <option value="wss">wss</option>
+              </select>
+          </td>
+      </tr>
+      <tr>
+          <td>WS Hostname</td>
+          <td><input type="text" id="hostname" value=""/></td>
+      </tr>
+      <tr>
+          <td>WS Port</td>
+          <td><input type="text" id="port" value="9000"/></td>
+      </tr>
+      <tr>
+          <td></td>
+          <td>
+              <input id="btnConnect"    type="button" value="Connect"    onclick="onConnectClick()">&nbsp;&nbsp;
+              <input id="btnDisconnect" type="button" value="Disconnect" onclick="onDisconnectClick()" disabled="disabled">
+          </td>
+      </tr>
+  </table><br/>
+  <!-- Envoi de messages -->
+  <table>
+      <tr>
+          <td width="200px">Message</td>
+          <td><input type="text" id="message_input"/></td>
+      </tr>
+      <tr>
+          <td></td>
+          <td>
+              <input id="message_btn" type="button" value="Send Message" disabled="disabled" onclick="onMessageSendClick()">
+          </td>
+      </tr>
+  </table><br/>
+  <!-- Envoi de commandes -->
+  <table>
+      <tr>
+          <td width="200px">Commande</td>
+          <td><input type="text" id="command_input"/></td>
+      </tr>
+      <tr>
+          <td></td>
+          <td>
+              <input id="command_btn" type="button" value="Send Command" disabled="disabled" onclick="onCommandSendClick()">
+          </td>
+      </tr>
+  </table><br/>
+   <textarea id="incomingMsgOutput" rows="3" cols="20" disabled="disabled"></textarea></br>
+  <!-- Systeme des commandes -->
+  <table>
+    <tr>
+    <td>
+    <p>Commande actuelle <input type="text" id="commande_code"/></p>
+
+    <input id="btnSetNeutre" type="button" value="Neutre" onclick="setNeutre()">
+    <input id="btnSetAvancer" type="button" value="Avancer" onclick="setAvancer()">
+    <input id="btnSetReculer" type="button" value="Reculler" onclick="setReculer()">
+    <input id="btnSetStopper" type="button" value="Stopper" onclick="setStopper()">
+
+    <input id="btnSetDroitA" type="button" value="Avancer Droit" onclick="setDroitA()">
+    <input id="btnSetDroitR" type="button" value="Reculer Droit" onclick="setDroitR()">
+    <input id="btnSetGaucheA" type="button" value="Avancer Gauche" onclick="setGaucheA()">
+    <input id="btnSetGaucheR" type="button" value="Reculer Gauche" onclick="setGaucheR()">
+
+    <input id="btnSetPDroit" type="button" value="PDroit" onclick="setPDroit()">
+    <input id="btnSetPGauche" type="button" value="PGauche" onclick="setPGauche()">
+
+    <input id="btnRUN" type="button" value="RUN" onclick="onRUNClick()" disabled>
+    <input id="btnSTOP" type="button" value="STOP" onclick="onSTOPClick()" disabled>
+    </td>
+    </tr>
+  </table>
+
+</body>
+</html>
